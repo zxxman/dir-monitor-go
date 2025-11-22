@@ -1,0 +1,46 @@
+{
+  "version": "3.2.1",
+  "monitors": [
+    {
+      "id": "monitor1",
+      "name": "日志文件监控",
+      "directory": "/var/log",
+      "command": "echo '处理文件: ${FILE_PATH}'",
+      "file_patterns": ["*.log", "*.txt"],
+      "timeout": 60,
+      "debounce_seconds": 5,
+      "enabled": true
+    },
+    {
+      "id": "monitor2", 
+      "name": "上传文件处理",
+      "directory": "/uploads",
+      "command": "python /scripts/process_file.py '${FILE_PATH}'",
+      "file_patterns": ["*.csv", "*.xlsx"],
+      "timeout": 300,
+      "schedule": "* 9-18 * * 1-5",
+      "debounce_seconds": 10,
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "log_file": "logs/dir-monitor-go.log",
+    "log_level": "info",
+    "log_show_caller": false,
+    "log_max_size": 10485760,
+    "log_compress": true,
+    "max_concurrent_operations": 5,
+    "operation_timeout_seconds": 300,
+    "file_stability_check_interval_ms": 1000,
+    "file_stability_timeout_seconds": 60,
+    "min_stability_time_ms": 5000,
+    "default_debounce_seconds": 1,
+    "directory_stability_quiet_ms": 2000,
+    "directory_stability_timeout_seconds": 60,
+    "small_file_threshold": 1048576,
+    "medium_file_threshold": 10485760,
+    "large_file_threshold": 104857600,
+    "default_rule_debounce_seconds": 30,
+    "performance_monitoring": false
+  }
+}

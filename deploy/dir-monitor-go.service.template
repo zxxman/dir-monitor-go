@@ -1,0 +1,21 @@
+[Unit]
+Description=Directory Monitor Go Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/dir-monitor-go
+ExecStart=/opt/dir-monitor-go/dir-monitor-go -config /opt/dir-monitor-go/configs/config.json
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# 安全设置已移除（如需启用，请按需添加）
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

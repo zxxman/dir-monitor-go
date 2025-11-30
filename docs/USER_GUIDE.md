@@ -1,557 +1,498 @@
-# 目录监控系统用户指南
+# 目录监控服务用户指南
 
-## 系统简介
+## 目录
 
-目录监控系统是一个基于Go语言开发的文件监控和处理系统，它可以监控指定目录的文件变化，并根据预定义的监控器配置执行相应的操作。系统支持多种文件操作触发条件、灵活的调度配置和可靠的错误处理机制。
+1. [简介](#简介)
+2. [安装与配置](#安装与配置)
+3. [基本使用](#基本使用)
+4. [配置文件详解](#配置文件详解)
+5. [命令行参数](#命令行参数)
+6. [常见使用场景](#常见使用场景)
+7. [故障排除](#故障排除)
+8. [高级功能](#高级功能)
 
-## 主要特性
+## 简介
 
-- **实时文件监控**：监控目录中的文件创建、修改、删除等操作
-- **灵活的文件匹配**：支持通配符和正则表达式匹配文件
-- **定时调度控制**：通过Cron表达式精确控制操作执行时间
-- **并发处理能力**：支持多文件同时处理，提高处理效率
-- **稳定性和可靠性**：文件稳定性检测、防抖机制、重试机制
-- **丰富的配置选项**：全面的系统设置和监控器配置
-- **详细的日志记录**：结构化日志记录和日志轮转
-- **易于部署和维护**：支持多种部署方式和系统服务管理
+目录监控服务（dir-monitor-go）是一个轻量级的文件系统监控工具，可以监控指定目录的变化并触发自定义命令。它支持多种文件模式匹配、并发操作控制、命令变量替换等高级功能。
 
-## 适用场景
+## 安装与配置
 
-- 文件传输后自动处理（FTP/SFTP接收文件处理）
-- 日志文件监控和分析
-- 数据文件导入和转换
-- 自动化备份和同步
-- 实时数据处理流水线
+### 安装方式
 
-## 系统要求
-
-### 操作系统
-
-- Ubuntu 20.04 LTS 或更高版本
-- Debian 11 或更高版本
-- CentOS 7 或更高版本（实验性支持）
-- 其他Linux发行版（可能需要额外配置）
-
-### 硬件要求
-
-- CPU：1核或以上
-- 内存：512MB或以上
-- 磁盘空间：根据监控文件大小确定
-- 网络：如需网络操作，需要相应网络连接
-
-### 软件依赖
-
-- Go 1.25或更高版本（编译时需要）
-- systemd（系统服务管理，可选）
-
-## 安装指南
-
-### 二进制安装
-
-1. 下载预编译的二进制文件：
+#### 从源码编译
 
 ```bash
-# 下载最新版本
-wget https://github.com/yourusername/dir-monitor-go/releases/latest/download/dir-monitor-go-linux-amd64.tar.gz
-
-# 解压文件
-tar -xzf dir-monitor-go-linux-amd64.tar.gz
-
-# 移动到系统路径
-sudo mv dir-monitor-go /usr/local/bin/
-
-# 验证安装
-dir-monitor-go --version
-```
-
-### 源码安装
-
-```bash
-# 克隆代码仓库
-git clone https://github.com/yourusername/dir-monitor-go.git
+git clone https://github.com/zxxman/dir-monitor-go.git
 cd dir-monitor-go
-
-# 编译程序
-go build -o dir-monitor-go cmd/dir-monitor-go/main.go
-
-# 安装到系统路径
-sudo cp dir-monitor-go /usr/local/bin/
-
-# 验证安装
-dir-monitor-go --version
+make build
 ```
 
-### 系统服务安装
+#### 使用预编译二进制文件
+
+从 [Releases](https://github.com/zxxman/dir-monitor-go/releases) 页面下载适合您系统的预编译二进制文件。
+
+#### 使用Docker
 
 ```bash
-# 创建系统用户（可选）
-sudo useradd --system --home /opt/dir-monitor-go --shell /bin/false dir-monitor
+docker pull zxxman/dir-monitor-go:latest
+```
 
-# 创建配置目录
-sudo mkdir -p /opt/dir-monitor-go/configs
-sudo mkdir -p /opt/dir-monitor-go/logs
+### 初始配置
 
-# 复制配置文件模板
-sudo cp configs/config.json.example /opt/dir-monitor-go/configs/config.json
+首次运行时，创建配置文件：
+
+```bash
+# 复制示例配置文件
+cp config.json.example config.json
 
 # 编辑配置文件
-sudo nano /opt/dir-monitor-go/configs/config.json
-
-# 复制系统服务文件
-sudo cp deploy/dir-monitor-go.service /etc/systemd/system/
-
-# 重新加载systemd配置
-sudo systemctl daemon-reload
-
-# 启用服务开机自启
-sudo systemctl enable dir-monitor-go
-
-# 启动服务
-sudo systemctl start dir-monitor-go
-
-# 检查服务状态
-sudo systemctl status dir-monitor-go
+nano config.json
 ```
 
-## 配置详解
+## 基本使用
 
-### 配置文件结构
+### 快速启动
+
+1. 创建一个简单的配置文件：
 
 ```json
 {
   "version": "3.2.1",
-  "metadata": {
-    "name": "配置名称",
-    "description": "配置描述"
-  },
   "monitors": [
     {
-      "id": "monitor_id",
-      "name": "监控器名称",
-      "description": "监控器描述",
-      "directory": "/path/to/directory",
-      "command": "/path/to/command",
-      "file_patterns": ["*.txt", "*.log"],
-      "timeout": 300,
-      "schedule": "* 15-21 * * 1-5",
-      "debounce_seconds": 15,
-      "enabled": true
+      "directory": "/tmp/test",
+      "command": "echo '文件已更改: {{.FilePath}}'",
+      "file_patterns": ["*.txt", "*.log"]
     }
   ],
   "settings": {
     "log_level": "info",
-    "log_file": "/path/to/log/file",
-    "log_show_caller": true,
-    "log_max_size": 10485760,
-    "log_compress": true,
-    "max_concurrent_operations": 10,
-    "operation_timeout_seconds": 600,
-    "file_stability_check_interval_ms": 1000,
-    "file_stability_timeout_seconds": 180,
-    "min_stability_time_ms": 10000,
-    "default_debounce_seconds": 10,
-    "directory_stability_quiet_ms": 5000,
-    "directory_stability_timeout_seconds": 180,
-    "small_file_threshold": 1048576,
-    "medium_file_threshold": 10485760,
-    "log_max_backups": 3,
-    "file_watcher_buffer_size": 100,
-    "event_channel_buffer_size": 100,
-    "execution_dedup_interval_seconds": 10,
-    "retry_attempts": 3,
-    "retry_delay_seconds": 5,
-    "health_check_interval_seconds": 60
+    "max_concurrent_operations": 5,
+    "file_stability_check": {
+      "enabled": true,
+      "min_stable_duration": "1s"
+    }
   }
 }
 ```
 
-### 系统设置字段说明
+2. 启动监控服务：
 
-| 字段 | 类型 | 必填 | 说明 |
+```bash
+./dir-monitor-go -c config.json
+```
+
+3. 在另一个终端中测试：
+
+```bash
+touch /tmp/test/example.txt
+```
+
+您应该会看到监控服务输出"文件已更改: /tmp/test/example.txt"。
+
+### 作为系统服务运行
+
+```bash
+# 安装为系统服务
+sudo make install-service
+
+# 启动服务
+sudo systemctl start dir-monitor-go
+
+# 设置开机自启
+sudo systemctl enable dir-monitor-go
+```
+
+## 配置文件详解
+
+### 配置文件结构
+
+配置文件采用JSON格式，包含三个主要部分：
+
+- `version`: 配置文件版本
+- `monitors`: 监控器配置数组
+- `settings`: 全局设置
+
+### 监控器配置
+
+每个监控器包含以下字段：
+
+| 字段 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-| log_level | string | 否 | 日志级别，可选值：debug, info, warn, error，默认info |
-| log_file | string | 否 | 日志文件路径，默认logs/dir-monitor-go.log |
-| log_show_caller | boolean | 否 | 是否显示调用者信息，默认true |
-| log_max_size | int | 否 | 日志文件最大大小（字节），默认10485760（10MB） |
-| log_max_backups | int | 否 | 日志文件备份数量，默认3 |
-| log_compress | boolean | 否 | 是否压缩轮转的日志文件，默认true |
-| max_concurrent_operations | int | 否 | 最大并发操作数，默认10 |
-| operation_timeout_seconds | int | 否 | 操作超时时间（秒），默认600 |
-| file_watcher_buffer_size | int | 否 | 文件监视器缓冲区大小，默认100 |
-| event_channel_buffer_size | int | 否 | 事件通道缓冲区大小，默认100 |
-| min_stability_time_ms | int | 否 | 最小稳定性时间（毫秒），默认10000 |
-| execution_dedup_interval_seconds | int | 否 | 执行去重间隔（秒），默认10 |
-| directory_stability_quiet_ms | int | 否 | 目录稳定性静默时间（毫秒），默认5000 |
-| directory_stability_timeout_seconds | int | 否 | 目录稳定性超时时间（秒），默认180 |
-| retry_attempts | int | 否 | 重试次数，默认3 |
-| retry_delay_seconds | int | 否 | 重试延迟时间（秒），默认5 |
-| health_check_interval_seconds | int | 否 | 健康检查间隔（秒），默认60 |
+| `directory` | string | 是 | 要监控的目录路径 |
+| `command` | string | 是 | 触发时执行的命令 |
+| `file_patterns` | []string | 否 | 文件模式匹配列表（默认匹配所有文件） |
+| `recursive` | bool | 否 | 是否递归监控子目录（默认true） |
+| `events` | []string | 否 | 要监控的事件类型（默认监控所有事件） |
+| `debounce` | object | 否 | 防抖配置 |
+| `filters` | object | 否 | 文件过滤器配置 |
 
-### 调度配置
+#### 事件类型
 
-系统支持通过Cron表达式来控制操作的执行时间。
+支持的事件类型：
+- `create`: 文件创建
+- `write`: 文件写入
+- `remove`: 文件删除
+- `rename`: 文件重命名
+- `chmod`: 文件权限变更
 
-#### Cron表达式格式
-
-```
-┌───────────── 分钟 (0 - 59)
-│ ┌───────────── 小时 (0 - 23)
-│ │ ┌───────────── 日 (1 - 31)
-│ │ │ ┌───────────── 月 (1 - 12)
-│ │ │ │ ┌───────────── 星期 (0 - 7) (0和7都表示星期日)
-│ │ │ │ │
-* * * * *
-```
-
-#### 常用调度示例
-
-| 表达式 | 说明 |
-|--------|------|
-| `* 15-21 * * 1-5` | 周一至周五 15-21点 |
-| `* 0-9 * * 1-6` | 周一至周六 0-9点 |
-| `0 2 * * *` | 每天凌晨2点 |
-| `*/30 * * * *` | 每30分钟 |
-| `0 0 * * 0` | 每周日凌晨 |
-
-### 完整配置示例
+#### 防抖配置
 
 ```json
-{
-  "version": "3.2.1",
-  "metadata": {
-    "name": "生产环境配置",
-    "description": "用于生产环境的标准配置"
-  },
-  "monitors": [
-    {
-      "id": "sftp_processor",
-      "name": "SFTP文件处理器",
-      "description": "处理SFTP目录中的新文件",
-      "directory": "/sftp/incoming",
-      "command": "/opt/scripts/process_sftp_file.sh",
-      "file_patterns": ["*.csv", "*.xlsx", "*.pdf"],
-      "timeout": 600,
-      "schedule": "* 9-17 * * 1-5",
-      "debounce_seconds": 30,
-      "enabled": true
-    },
-    {
-      "id": "log_analyzer",
-      "name": "日志分析器",
-      "description": "分析应用日志文件",
-      "directory": "/var/log/application",
-      "command": "/opt/scripts/analyze_logs.py",
-      "file_patterns": ["*.log"],
-      "timeout": 300,
-      "schedule": "*/15 * * * *",
-      "debounce_seconds": 10,
-      "enabled": true
-    }
-  ],
-  "settings": {
-    "log_level": "info",
-    "log_file": "/var/log/dir-monitor-go/app.log",
-    "log_show_caller": true,
-    "log_max_size": 20971520,
-    "log_compress": true,
-    "log_max_backups": 5,
-    "max_concurrent_operations": 5,
-    "operation_timeout_seconds": 900,
-    "file_stability_check_interval_ms": 1000,
-    "file_stability_timeout_seconds": 180,
-    "min_stability_time_ms": 10000,
-    "default_debounce_seconds": 15,
-    "directory_stability_quiet_ms": 5000,
-    "directory_stability_timeout_seconds": 180,
-    "small_file_threshold": 1048576,
-    "medium_file_threshold": 10485760,
-    "file_watcher_buffer_size": 100,
-    "event_channel_buffer_size": 100,
-    "execution_dedup_interval_seconds": 10,
-    "retry_attempts": 3,
-    "retry_delay_seconds": 5,
-    "health_check_interval_seconds": 60
-  }
+"debounce": {
+  "enabled": true,
+  "delay": "500ms"
+}
+```
+
+#### 过滤器配置
+
+```json
+"filters": {
+  "min_size": "1KB",
+  "max_size": "10MB",
+  "exclude_patterns": ["*.tmp", "*.bak"]
+}
+```
+
+### 全局设置
+
+| 字段 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `log_level` | string | "info" | 日志级别（debug, info, warn, error） |
+| `log_file` | string | - | 日志文件路径（默认输出到控制台） |
+| `max_concurrent_operations` | int | 5 | 最大并发操作数 |
+| `file_stability_check` | object | - | 文件稳定性检查配置 |
+| `performance_monitoring` | object | - | 性能监控配置 |
+
+#### 文件稳定性检查
+
+```json
+"file_stability_check": {
+  "enabled": true,
+  "min_stable_duration": "1s",
+  "check_interval": "100ms"
+}
+```
+
+#### 性能监控
+
+```json
+"performance_monitoring": {
+  "enabled": true,
+  "report_interval": "1m"
 }
 ```
 
 ## 命令行参数
 
-### 启动参数
+| 参数 | 简写 | 描述 | 默认值 |
+|------|------|------|--------|
+| `--config` | `-c` | 配置文件路径 | `./config.json` |
+| `--log-level` | `-l` | 日志级别 | `info` |
+| `--version` | `-v` | 显示版本信息 | - |
+| `--help` | `-h` | 显示帮助信息 | - |
 
-| 参数 | 必填 | 说明 | 示例 |
-|------|------|------|------|
-| --config, -c | 否 | 配置文件路径，默认configs/config.json | /etc/dir-monitor/config.json |
-| --stop-file | 否 | 当该文件出现时优雅退出（测试/集成用） | /tmp/stop_marker |
-| --version, -v | 否 | 显示版本信息 | - |
-| --dry-run | 否 | 仅验证配置，不启动实际监控 | - |
-| --help, -h | 否 | 显示帮助信息 | - |
-
-### 使用示例
+### 示例
 
 ```bash
-# 基本启动（使用默认配置文件）
-./dir-monitor-go
+# 使用自定义配置文件
+./dir-monitor-go -c /etc/dir-monitor/config.json
 
-# 指定配置文件启动
-./dir-monitor-go --config /path/to/config.json
-
-# 验证配置
-./dir-monitor-go --config /path/to/config.json --dry-run
+# 设置日志级别为debug
+./dir-monitor-go -l debug
 
 # 显示版本信息
-./dir-monitor-go --version
-
-# 测试模式（使用停止文件）
-./dir-monitor-go --config /path/to/config.json --stop-file /tmp/stop_marker
+./dir-monitor-go -v
 ```
 
-## 环境变量
+## 常见使用场景
 
-在执行操作时，系统会提供以下环境变量：
-
-| 变量名 | 说明 | 示例 |
-|--------|------|------|
-| FILE_PATH | 文件完整路径 | /sftp/user2/data/report.csv |
-| FILE_NAME | 文件名 | report.csv |
-| FILE_DIR | 文件所在目录 | /sftp/user2/data |
-| EVENT_TYPE | 事件类型（created, modified, deleted, renamed） | created |
-| EVENT_TIME | 事件时间（Unix时间戳） | 1698768000 |
-
-### 使用示例
-
-在命令中使用环境变量：
-```bash
-echo "文件 ${FILE_NAME} 在 ${FILE_DIR} 目录中被 ${EVENT_TYPE}，时间：${EVENT_TIME}"
-```
-
-Python脚本中使用环境变量：
-```python
-import os
-file_path = os.environ.get('FILE_PATH')
-event_type = os.environ.get('EVENT_TYPE')
-print(f"文件 {file_path} 被 {event_type}")
-```
-
-## 系统服务管理
-
-### 启动服务
-
-```bash
-sudo systemctl start dir-monitor-go
-```
-
-### 停止服务
-
-```bash
-sudo systemctl stop dir-monitor-go
-```
-
-### 重启服务
-
-```bash
-sudo systemctl restart dir-monitor-go
-```
-
-### 查看服务状态
-
-```bash
-sudo systemctl status dir-monitor-go
-```
-
-### 查看服务日志
-
-```bash
-# 查看实时日志
-sudo journalctl -u dir-monitor-go -f
-
-# 查看最近的日志
-sudo journalctl -u dir-monitor-go --since "1 hour ago"
-
-# 查看特定日期的日志
-sudo journalctl -u dir-monitor-go --since "2024-01-01" --until "2024-01-02"
-```
-
-### 禁用服务开机自启
-
-```bash
-sudo systemctl disable dir-monitor-go
-```
-
-### 启用服务开机自启
-
-```bash
-sudo systemctl enable dir-monitor-go
-```
-
-## Docker容器运行
-
-### 构建Docker镜像
-
-```bash
-docker build -t dir-monitor-go .
-```
-
-### 运行Docker容器
-
-```bash
-# 基本运行
-docker run -d \
-  --name dir-monitor-go \
-  -v /path/to/configs:/opt/dir-monitor-go/configs \
-  -v /path/to/monitor:/path/to/monitor \
-  dir-monitor-go
-
-# 运行并映射日志目录
-docker run -d \
-  --name dir-monitor-go \
-  -v /path/to/configs:/opt/dir-monitor-go/configs \
-  -v /path/to/monitor:/path/to/monitor \
-  -v /path/to/logs:/opt/dir-monitor-go/logs \
-  dir-monitor-go
-
-# 运行并指定配置文件
-docker run -d \
-  --name dir-monitor-go \
-  -v /path/to/configs:/opt/dir-monitor-go/configs \
-  -v /path/to/monitor:/path/to/monitor \
-  dir-monitor-go --config /opt/dir-monitor-go/configs/custom-config.json
-```
-
-## 常见场景配置示例
-
-### 监控日志文件
-
-适用于监控应用程序日志文件并在文件更新时执行分析操作。
+### 1. 日志文件监控
 
 ```json
 {
-  "version": "3.2.1",
-  "metadata": {
-    "name": "日志监控配置",
-    "description": "监控应用程序日志文件并执行分析"
-  },
   "monitors": [
     {
-      "id": "log_watcher",
-      "name": "日志监控器",
-      "directory": "/var/log/application",
-      "command": "/opt/scripts/analyze_log.sh",
+      "directory": "/var/log",
+      "command": "tail -n 10 {{.FilePath}}",
       "file_patterns": ["*.log"],
-      "timeout": 300,
-      "debounce_seconds": 10,
-      "enabled": true
+      "events": ["write"]
     }
-  ],
-  "settings": {
-    "log_level": "info",
-    "log_file": "/var/log/dir-monitor-go/logs.log",
-    "max_concurrent_operations": 3,
-    "operation_timeout_seconds": 300
-  }
+  ]
 }
 ```
 
-### 处理上传文件
-
-适用于处理通过SFTP或其他方式上传到指定目录的文件。
+### 2. 上传文件处理
 
 ```json
 {
-  "version": "3.2.1",
-  "metadata": {
-    "name": "文件上传处理配置",
-    "description": "处理上传到指定目录的文件"
-  },
   "monitors": [
     {
-      "id": "upload_processor",
-      "name": "上传文件处理器",
-      "directory": "/sftp/incoming",
-      "command": "/opt/scripts/process_upload.sh",
-      "file_patterns": ["*.csv", "*.xlsx", "*.pdf"],
-      "timeout": 600,
-      "schedule": "* 9-17 * * 1-5",
-      "debounce_seconds": 30,
-      "enabled": true
+      "directory": "/uploads",
+      "command": "python3 process_upload.py {{.FilePath}}",
+      "file_patterns": ["*.jpg", "*.png", "*.pdf"],
+      "events": ["create"],
+      "debounce": {
+        "enabled": true,
+        "delay": "2s"
+      }
     }
-  ],
-  "settings": {
-    "log_level": "info",
-    "log_file": "/var/log/dir-monitor-go/upload.log",
-    "log_max_size": 20971520,
-    "log_max_backups": 5,
-    "max_concurrent_operations": 3,
-    "operation_timeout_seconds": 900,
-    "retry_attempts": 3,
-    "retry_delay_seconds": 10
-  }
+  ]
+}
+```
+
+### 3. 配置文件热重载
+
+```json
+{
+  "monitors": [
+    {
+      "directory": "/etc/myapp",
+      "command": "systemctl reload myapp",
+      "file_patterns": ["*.conf"],
+      "events": ["write"]
+    }
+  ]
+}
+```
+
+### 4. 备份新文件
+
+```json
+{
+  "monitors": [
+    {
+      "directory": "/data",
+      "command": "rsync -av {{.FilePath}} /backup/$(date +%Y%m%d)/",
+      "file_patterns": ["*"],
+      "events": ["create"],
+      "filters": {
+        "min_size": "1MB"
+      }
+    }
+  ]
 }
 ```
 
 ## 故障排除
 
-### 服务无法启动
+### 常见问题
 
-1. 检查配置文件是否存在且格式正确
-2. 确认配置文件路径正确
-3. 检查系统日志获取详细错误信息
-4. 验证监控目录权限
+#### 1. 监控不工作
 
-### 监控不工作
+**可能原因**：
+- 配置文件路径错误
+- 监控目录不存在
+- 权限不足
 
-1. 检查监控器是否启用
-2. 确认目录路径和文件模式匹配
-3. 查看日志文件了解具体错误
-4. 验证调度时间配置
-
-### 性能问题
-
-1. 检查是否监控了过多文件
-2. 调整并发操作数设置
-3. 增加防抖时间避免频繁触发
-4. 优化命令执行逻辑
-
-### 日志相关问题
-
-1. 检查日志文件路径和权限
-2. 确认日志级别设置合适
-3. 验证日志轮转配置
-4. 检查磁盘空间是否充足
-
-## 更新和维护
-
-### 软件更新
-
+**解决方法**：
 ```bash
-# 停止服务
-sudo systemctl stop dir-monitor-go
+# 检查配置文件
+./dir-monitor-go -c config.json -l debug
 
-# 下载新版本（二进制安装方式）
-wget https://github.com/yourusername/dir-monitor-go/releases/latest/download/dir-monitor-go-linux-amd64.tar.gz
-tar -xzf dir-monitor-go-linux-amd64.tar.gz
-sudo mv dir-monitor-go /usr/local/bin/
+# 检查目录权限
+ls -la /path/to/monitor
 
-# 重启服务
-sudo systemctl start dir-monitor-go
+# 确保有读取目录的权限
+sudo usermod -a -G $(stat -c '%G' /path/to/monitor) $USER
 ```
 
-### 配置更新
+#### 2. 命令执行失败
 
+**可能原因**：
+- 命令路径错误
+- 命令权限不足
+- 变量替换错误
+
+**解决方法**：
 ```bash
-# 编辑配置文件
-sudo nano /opt/dir-monitor-go/configs/config.json
+# 测试命令
+echo "文件已更改: /tmp/test.txt" > /tmp/test.txt
 
-# 重启服务使配置生效
-sudo systemctl restart dir-monitor-go
+# 检查命令权限
+which your-command
+
+# 使用绝对路径
+"/usr/bin/python3" "/path/to/script.py" "{{.FilePath}}"
 ```
 
-### 备份配置
+#### 3. 性能问题
+
+**可能原因**：
+- 监控目录过大
+- 文件变化频繁
+- 并发操作过多
+
+**解决方法**：
+```json
+{
+  "settings": {
+    "max_concurrent_operations": 2,
+    "file_stability_check": {
+      "enabled": true,
+      "min_stable_duration": "5s"
+    }
+  }
+}
+```
+
+#### 4. 日志文件过大
+
+**解决方法**：
+```json
+{
+  "settings": {
+    "log_level": "warn",
+    "log_file": "/var/log/dir-monitor-go.log"
+  }
+}
+```
+
+并配置日志轮转：
 
 ```bash
-# 备份配置文件
-sudo cp /opt/dir-monitor-go/configs/config.json /opt/dir-monitor-go/configs/config.json.backup.$(date +%Y%m%d)
-
-# 备份整个配置目录
-sudo tar -czf dir-monitor-config-backup-$(date +%Y%m%d).tar.gz /opt/dir-monitor-go/configs/
+# 创建logrotate配置
+sudo nano /etc/logrotate.d/dir-monitor-go
 ```
+
+内容：
+```
+/var/log/dir-monitor-go.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 dir-monitor dir-monitor
+}
+```
+
+### 调试技巧
+
+1. **使用调试日志级别**：
+   ```bash
+   ./dir-monitor-go -l debug
+   ```
+
+2. **测试配置文件**：
+   ```bash
+   ./dir-monitor-go -c config.json -t
+   ```
+
+3. **手动触发命令**：
+   ```bash
+   # 替换变量
+   FilePath="/tmp/test.txt"
+   echo "文件已更改: $FilePath"
+   ```
+
+## 高级功能
+
+### 命令变量替换
+
+在命令中可以使用以下变量：
+
+| 变量 | 描述 |
+|------|------|
+| `{{.FilePath}}` | 完整文件路径 |
+| `{{.FileName}}` | 文件名（不含路径） |
+| `{{.FileExt}}` | 文件扩展名 |
+| `{{.DirPath}}` | 目录路径 |
+| `{{.EventName}}` | 事件名称 |
+| `{{.Timestamp}}` | 时间戳 |
+| `{{.PID}}` | 进程ID |
+
+### 复杂命令示例
+
+```json
+{
+  "command": "bash -c 'echo \"{{.Timestamp}}: {{.EventName}} on {{.FilePath}}\" >> /var/log/file-events.log'"
+}
+```
+
+### 多监控器配置
+
+```json
+{
+  "monitors": [
+    {
+      "directory": "/var/log",
+      "command": "tail -n 5 {{.FilePath}}",
+      "file_patterns": ["*.log"],
+      "events": ["write"]
+    },
+    {
+      "directory": "/uploads",
+      "command": "python3 /scripts/process_upload.py {{.FilePath}}",
+      "file_patterns": ["*.jpg", "*.png"],
+      "events": ["create"]
+    },
+    {
+      "directory": "/etc/myapp",
+      "command": "systemctl reload myapp",
+      "file_patterns": ["*.conf"],
+      "events": ["write"]
+    }
+  ]
+}
+```
+
+### Docker部署
+
+创建Dockerfile：
+
+```dockerfile
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+COPY . .
+RUN go build -o dir-monitor-go ./cmd/dir-monitor-go
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates bash
+WORKDIR /root/
+
+COPY --from=builder /app/dir-monitor-go .
+COPY config.json.example config.json
+
+CMD ["./dir-monitor-go"]
+```
+
+构建和运行：
+
+```bash
+docker build -t dir-monitor-go .
+docker run -v /path/to/monitor:/data -v /path/to/config.json:/root/config.json dir-monitor-go
+```
+
+### Docker Compose部署
+
+创建docker-compose.yml：
+
+```yaml
+version: '3.8'
+
+services:
+  dir-monitor:
+    image: zxxman/dir-monitor-go:latest
+    container_name: dir-monitor
+    restart: unless-stopped
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - /path/to/monitor:/data:ro
+      - /path/to/logs:/app/logs
+    environment:
+      - LOG_LEVEL=info
+```
+
+运行：
+
+```bash
+docker-compose up -d
+```
+
+---
+
+如需更多帮助，请参考[开发文档](DEVELOPMENT.md)或提交[Issue](https://github.com/zxxman/dir-monitor-go/issues)。

@@ -1,536 +1,493 @@
-# 目录监控系统开发指南
+# 目录监控服务开发文档
 
-## 系统架构
+## 目录
 
-目录监控系统采用模块化设计，主要包括以下核心组件：
+1. [项目概述](#项目概述)
+2. [开发环境搭建](#开发环境搭建)
+3. [项目结构](#项目结构)
+4. [核心模块](#核心模块)
+5. [开发流程](#开发流程)
+6. [代码规范](#代码规范)
+7. [测试指南](#测试指南)
+8. [构建与发布](#构建与发布)
+9. [贡献指南](#贡献指南)
 
-### 核心模块
+## 项目概述
 
-1. **配置管理模块 (config)**
-   - 负责配置文件的加载、解析和验证
-   - 支持配置版本兼容性检查
+目录监控服务（dir-monitor-go）是一个使用Go语言开发的文件系统监控工具，它可以监控指定目录的变化并触发自定义命令。项目采用模块化设计，具有良好的可扩展性和可维护性。
 
-2. **文件监控模块 (monitor)**
-   - 基于fsnotify实现文件系统事件监听
-   - 支持目录递归监控和文件模式匹配
-   - 实现文件稳定性检测机制
-   - 集成调度功能，控制操作执行的时间窗口
+### 主要特性
 
-3. **日志模块 (logger)**
-   - 基于zap实现结构化日志记录
-   - 支持日志轮转和压缩
-   - 提供不同级别的日志输出
+- 实时文件系统监控
+- 灵活的配置管理
+- 并发操作控制
+- 文件稳定性检查
+- 详细的日志记录
+- 多种部署方式
 
-4. **数据模型模块 (model)**
-   - 定义系统的数据结构
-   - 包括文件事件和配置设置等模型
+### 技术栈
 
-### 数据流
+- **语言**: Go 1.25+
+- **主要依赖**: 
+  - `github.com/fsnotify/fsnotify v1.9.0` - 文件系统监控
+  - `github.com/adhocore/gronx v1.19.6` - Cron表达式解析
+  - `golang.org/x/sys v0.37.0` - 系统调用
 
-```
-[配置文件] --> [配置管理] --> [文件监控] --> [调度控制] --> [执行引擎] --> [操作执行]
-     ^              |              |              |              |              |
-     |              v              v              v              v              v
-     |         [日志记录]    [事件处理]    [时间检查]    [并发控制]    [环境变量]
-     |              |              |              |              |              |
-     |              v              v              v              v              v
-     |         [健康检查]    [稳定性检测]   [调度决策]    [超时管理]    [结果处理]
-     |              |              |              |              |              |
-     +---------------------------------------------------------------------------+
-```
+## 开发环境搭建
 
-## 环境准备
+### 前置要求
 
-### 开发环境要求
-
-- Go 1.25或更高版本
-- Git版本控制工具
-- Docker (可选，用于容器化测试)
-- Make (用于构建和测试)
-
-### 安装Go环境
-
-```bash
-# 下载Go安装包
-wget https://golang.org/dl/go1.25.3.linux-amd64.tar.gz
-
-# 解压到/usr/local
-sudo tar -C /usr/local -xzf go1.25.3.linux-amd64.tar.gz
-
-# 添加到PATH
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-
-# 验证安装
-go version
-```
+- Go 1.25 或更高版本
+- Git
+- Make（可选，用于构建）
 
 ### 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/dir-monitor-go.git
+git clone https://github.com/zxxman/dir-monitor-go.git
 cd dir-monitor-go
 ```
 
 ### 安装依赖
 
 ```bash
-go mod tidy
+go mod download
 ```
+
+### 验证环境
+
+```bash
+go version
+go mod verify
+```
+
+### 开发工具推荐
+
+- **IDE**: VS Code, GoLand, Vim
+- **插件**: 
+  - Go官方插件
+  - golangci-lint（代码检查）
+  - Delve（调试器）
 
 ## 项目结构
 
 ```
 dir-monitor-go/
 ├── cmd/
-│   └── dir-monitor-go/
-│       └── main.go              # 程序入口点
-├── configs/
-│   └── config.json.example      # 配置文件示例
-├── deploy/
-│   ├── dir-monitor-go.service   # systemd服务文件
-│   ├── deploy-service.sh        # 服务部署脚本
-│   └── service-manager.sh       # 服务管理脚本
-├── docs/
-│   ├── API.md                   # API文档
-│   ├── USER_GUIDE.md            # 用户指南
-│   └── DEVELOPMENT.md           # 开发指南
-├── internal/
-│   ├── config/                  # 配置管理模块
-│   │   └── config.go            # 配置结构定义和加载
-│   ├── logger/                  # 日志模块
-│   │   └── logger.go            # Zap日志实现
-│   ├── model/                   # 数据模型
-│   │   ├── event.go             # 文件事件模型
-│   │   └── settings.go          # 配置模型
-│   └── monitor/                 # 文件监控模块
-│       ├── fsnotify_watcher.go  # 基于fsnotify的文件监视器
-│       ├── manager.go           # 监控管理器
-│       ├── monitor.go           # 核心监控逻辑（包含调度功能）
-│       ├── process_kill.go      # 进程终止功能
-│       ├── runner.go            # 命令运行器
-│       └── watcher.go           # 文件监视器接口
-├── go.mod                       # Go模块定义
-├── go.sum                       # Go模块校验和
-├── Makefile                     # 构建文件
-└── README.md                    # 项目说明
+│   └── dir-monitor-go/        # 主程序入口
+│       └── main.go
+├── internal/                  # 内部包
+│   ├── config/               # 配置管理
+│   │   └── config.go
+│   ├── logger/               # 日志管理
+│   │   └── logger.go
+│   ├── model/                # 数据模型
+│   │   ├── event.go
+│   │   └── settings.go
+│   └── monitor/              # 监控核心逻辑
+│       └── monitor.go
+├── configs/                  # 配置文件
+│   └── config.json.example
+├── deploy/                   # 部署相关
+│   └── dir-monitor-go.service
+├── docs/                     # 文档
+├── scripts/                  # 脚本文件
+├── .gitignore
+├── CHANGELOG.md
+├── LICENSE
+├── Makefile
+├── README.md
+├── go.mod
+└── go.sum
 ```
 
-## 构建和测试
+## 核心模块
 
-### 本地构建
+### 1. 配置管理 (internal/config)
 
-```bash
-# 构建项目
-go build -o dir-monitor-go cmd/dir-monitor-go/main.go
+配置管理模块负责加载和验证配置文件，提供配置访问接口。
 
-# 运行程序
-./dir-monitor-go --config configs/config.json.example
-```
-
-### 交叉编译
-
-```bash
-# 编译Linux版本
-GOOS=linux GOARCH=amd64 go build -o dir-monitor-go-linux-amd64 cmd/dir-monitor-go/main.go
-
-# 编译Windows版本
-GOOS=windows GOARCH=amd64 go build -o dir-monitor-go-windows-amd64.exe cmd/dir-monitor-go/main.go
-
-# 编译macOS版本
-GOOS=darwin GOARCH=amd64 go build -o dir-monitor-go-darwin-amd64 cmd/dir-monitor-go/main.go
-```
-
-### 运行测试
-
-```bash
-# 运行所有测试
-go test ./...
-
-# 运行特定模块测试
-go test ./internal/config/...
-go test ./internal/monitor/...
-
-# 运行测试并显示覆盖率
-go test -cover ./...
-
-# 生成覆盖率报告
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-### 使用Makefile
-
-```bash
-# 构建项目
-make build
-
-# 运行测试
-make test
-
-# 运行测试并生成覆盖率报告
-make coverage
-
-# 清理构建文件
-make clean
-
-# 安装到系统路径
-make install
-
-# 卸载程序
-make uninstall
-
-# 构建Docker镜像
-make docker-build
-
-# 运行Docker容器
-make docker-run
-```
-
-## 核心模块详解
-
-### 配置管理模块
-
-配置管理模块负责加载、解析和验证配置文件。主要功能包括：
-
-1. 配置结构定义 (`internal/config/config.go`)
-2. 配置文件加载 (`internal/config/loader.go`)
-3. 配置验证 (`internal/config/validator.go`)
-
-#### 配置结构
-
+主要结构体：
 ```go
 type Config struct {
     Version  string    `json:"version"`
-    Metadata Metadata  `json:"metadata"`
     Monitors []Monitor `json:"monitors"`
     Settings Settings  `json:"settings"`
 }
 
 type Monitor struct {
-    ID              string   `json:"id"`
-    Name            string   `json:"name"`
-    Description     string   `json:"description"`
-    Directory       string   `json:"directory"`
-    Command         string   `json:"command"`
-    FilePatterns    []string `json:"file_patterns"`
-    Timeout         int      `json:"timeout"`
-    Schedule        string   `json:"schedule"`
-    DebounceSeconds int      `json:"debounce_seconds"`
-    Enabled         bool     `json:"enabled"`
-}
-
-type Settings struct {
-    LogLevel                        string `json:"log_level"`
-    LogFile                         string `json:"log_file"`
-    LogShowCaller                   bool   `json:"log_show_caller"`
-    LogMaxSize                      int    `json:"log_max_size"`
-    LogMaxBackups                   int    `json:"log_max_backups"`
-    LogCompress                     bool   `json:"log_compress"`
-    MaxConcurrentOperations         int    `json:"max_concurrent_operations"`
-    OperationTimeoutSeconds         int    `json:"operation_timeout_seconds"`
-    FileWatcherBufferSize           int    `json:"file_watcher_buffer_size"`
-    EventChannelBufferSize          int    `json:"event_channel_buffer_size"`
-    MinStabilityTimeMs              int    `json:"min_stability_time_ms"`
-    ExecutionDedupIntervalSeconds   int    `json:"execution_dedup_interval_seconds"`
-    DirectoryStabilityQuietMs       int    `json:"directory_stability_quiet_ms"`
-    DirectoryStabilityTimeoutSeconds int   `json:"directory_stability_timeout_seconds"`
-    RetryAttempts                   int    `json:"retry_attempts"`
-    RetryDelaySeconds               int    `json:"retry_delay_seconds"`
-    HealthCheckIntervalSeconds      int    `json:"health_check_interval_seconds"`
+    Directory    string   `json:"directory"`
+    Command      string   `json:"command"`
+    FilePatterns []string `json:"file_patterns"`
+    Recursive    bool     `json:"recursive"`
+    Events       []string `json:"events"`
+    Debounce     Debounce `json:"debounce"`
+    Filters      Filters  `json:"filters"`
 }
 ```
 
-### 文件监控模块
+主要方法：
+- `LoadConfig(path string) (*Config, error)` - 加载配置文件
+- `Validate() error` - 验证配置有效性
+- `applyDefaults()` - 应用默认值
 
-文件监控模块基于fsnotify实现文件系统事件监听，主要组件包括：
+### 2. 日志管理 (internal/logger)
 
-1. 文件监视器 (`internal/monitor/watcher.go`)
-2. 命令运行器 (`internal/monitor/runner.go`)
-3. 稳定性检测器 (`internal/monitor/stability.go`)
+日志管理模块提供结构化日志记录功能，支持多种日志级别和输出方式。
 
-#### 文件监视器工作流程
+主要功能：
+- 多级别日志（debug, info, warn, error）
+- 日志轮转
+- 调用者信息记录
+- 自定义格式化
 
-1. 初始化fsnotify watcher
-2. 添加监控目录到watcher
-3. 启动事件监听goroutine
-4. 处理文件系统事件
-5. 过滤和去重事件
-6. 触发命令执行
+主要方法：
+- `NewLogger(config LoggerConfig) *Logger` - 创建日志器
+- `Info(msg string, fields ...Field)` - 记录信息日志
+- `Error(msg string, fields ...Field)` - 记录错误日志
 
-#### 稳定性检测机制
+### 3. 监控核心 (internal/monitor)
 
-为避免对正在写入的文件过早执行操作，系统实现了稳定性检测机制：
+监控核心模块是项目的核心，负责文件系统监控和事件处理。
 
-1. 文件事件触发后，等待指定的稳定性时间
-2. 在稳定性时间内，定期检查文件是否仍在变化
-3. 如果文件在稳定性时间内保持不变，则认为文件已稳定
-4. 文件稳定后，触发相应的操作执行
-
-### 调度功能
-
-调度功能集成在文件监控模块中，使用github.com/adhocore/gronx库实现Cron表达式解析和调度控制：
-
-1. 调度检查逻辑 (`internal/monitor/monitor.go`中的`isScheduleActive`方法)
-2. 调度决策逻辑
-
-#### 调度工作流程
-
-1. 解析监控器配置中的Cron表达式
-2. 在文件事件触发时检查当前时间是否匹配调度表达式
-3. 时间窗口匹配时允许操作执行
-4. 时间窗口不匹配时跳过操作执行
-
-### 命令执行功能
-
-命令执行功能集成在文件监控模块中，负责管理命令执行队列和并发控制：
-
-1. 命令执行器 (`internal/monitor/runner.go`中的`CommandExecutor`结构体)
-2. 并发控制逻辑
-
-#### 命令执行特性
-
-1. 并发控制：限制同时执行的操作数量
-2. 超时管理：为每个操作设置超时时间
-3. 重试机制：操作失败时自动重试（通过配置实现）
-4. 环境变量注入：为命令执行提供环境变量
-
-### 日志模块
-
-日志模块基于zap实现结构化日志记录：
-
-1. Zap日志实现 (`internal/logger/zap_logger.go`)
-2. 日志配置和管理
-
-#### 日志特性
-
-1. 多级别日志输出（debug, info, warn, error）
-2. 日志轮转和压缩
-3. 结构化日志格式
-4. 调用者信息显示
-
-## 性能优化策略
-
-### 监控大量文件
-
-当需要监控大量文件时，可以通过以下配置优化性能：
-
-```json
-{
-  "settings": {
-    "file_watcher_buffer_size": 500,
-    "event_channel_buffer_size": 500,
-    "max_concurrent_operations": 5,
-    "default_debounce_seconds": 30
-  }
+主要结构体：
+```go
+type Monitor struct {
+    config       *config.Config
+    logger       *logger.Logger
+    watchers     map[string]*fsnotify.Watcher
+    eventChan    chan fsnotify.Event
+    stopChan     chan struct{}
+    wg           sync.WaitGroup
+    sem          chan struct{}
 }
 ```
 
-### 处理大文件
+主要方法：
+- `NewMonitor(cfg *config.Config, log *logger.Logger) *Monitor` - 创建监控器
+- `Start() error` - 启动监控
+- `Stop()` - 停止监控
+- `startWatching(monitor config.Monitor) error` - 启动目录监控
+- `handleEvent(event fsnotify.Event, monitor config.Monitor)` - 处理文件事件
 
-对于大文件处理，建议调整以下配置：
+### 4. 数据模型 (internal/model)
 
-```json
-{
-  "settings": {
-    "min_stability_time_ms": 30000,
-    "directory_stability_quiet_ms": 10000,
-    "directory_stability_timeout_seconds": 300,
-    "operation_timeout_seconds": 1800
-  }
+数据模型模块定义了项目中使用的数据结构。
+
+主要结构体：
+- `Event` - 文件事件
+- `Settings` - 系统设置
+- `Debounce` - 防抖配置
+- `Filters` - 过滤器配置
+
+## 开发流程
+
+### 1. 创建功能分支
+
+```bash
+git checkout -b feature/new-feature
+```
+
+### 2. 开发与测试
+
+- 编写代码
+- 添加单元测试
+- 运行测试确保通过
+
+### 3. 代码检查
+
+```bash
+# 运行代码格式化
+go fmt ./...
+
+# 运行代码检查
+golangci-lint run
+
+# 运行测试
+go test -v ./...
+```
+
+### 4. 提交代码
+
+```bash
+git add .
+git commit -m "feat: add new feature"
+```
+
+### 5. 推送与创建PR
+
+```bash
+git push origin feature/new-feature
+```
+
+在GitHub上创建Pull Request。
+
+## 代码规范
+
+### 1. 命名规范
+
+- 包名：小写，简短，有意义
+- 变量名：驼峰命名法
+- 常量名：大写，下划线分隔
+- 函数名：驼峰命名法，导出函数首字母大写
+
+### 2. 注释规范
+
+- 公开函数必须有注释
+- 注释应以函数名开头
+- 注释应说明函数的目的、参数和返回值
+
+示例：
+```go
+// NewMonitor creates a new file system monitor with the given configuration.
+// It initializes the logger, event channels, and semaphore for concurrent control.
+func NewMonitor(cfg *config.Config, log *logger.Logger) *Monitor {
+    // Implementation...
 }
 ```
 
-### 减少资源占用
+### 3. 错误处理
 
-为了减少系统资源占用，可以使用以下配置：
+- 使用明确的错误变量
+- 错误信息应包含上下文
+- 避免忽略错误
 
-```json
-{
-  "settings": {
-    "log_level": "warn",
-    "log_max_size": 5242880,
-    "log_max_backups": 2,
-    "max_concurrent_operations": 3,
-    "file_watcher_buffer_size": 50,
-    "event_channel_buffer_size": 50
-  }
+示例：
+```go
+// 不好的做法
+file, _ := os.Open(filename)
+
+// 好的做法
+file, err := os.Open(filename)
+if err != nil {
+    return fmt.Errorf("failed to open file %s: %w", filename, err)
 }
 ```
 
-## 部署指南
+### 4. 并发安全
 
-### 系统服务部署
+- 使用互斥锁保护共享数据
+- 使用通道进行通信
+- 避免数据竞争
 
-1. 创建系统用户（可选）：
-   ```bash
-   sudo useradd --system --home /opt/dir-monitor-go --shell /bin/false dir-monitor
-   ```
+## 测试指南
 
-2. 创建配置目录：
-   ```bash
-   sudo mkdir -p /opt/dir-monitor-go/configs
-   sudo mkdir -p /opt/dir-monitor-go/logs
-   ```
+### 1. 单元测试
 
-3. 复制配置文件：
-   ```bash
-   sudo cp configs/config.json.example /opt/dir-monitor-go/configs/config.json
-   ```
+单元测试应覆盖所有主要功能。测试文件应以`_test.go`结尾。
 
-4. 编辑配置文件：
-   ```bash
-   sudo nano /opt/dir-monitor-go/configs/config.json
-   ```
+示例：
+```go
+func TestLoadConfig(t *testing.T) {
+    tests := []struct {
+        name    string
+        path    string
+        want    *config.Config
+        wantErr bool
+    }{
+        {
+            name:    "valid config",
+            path:    "testdata/valid_config.json",
+            want:    &config.Config{Version: "3.2.1"},
+            wantErr: false,
+        },
+        {
+            name:    "invalid config",
+            path:    "testdata/invalid_config.json",
+            want:    nil,
+            wantErr: true,
+        },
+    }
 
-5. 复制系统服务文件：
-   ```bash
-   sudo cp deploy/dir-monitor-go.service /etc/systemd/system/
-   ```
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := config.LoadConfig(tt.path)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if !reflect.DeepEqual(got, tt.want) {
+                t.Errorf("LoadConfig() = %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
 
-6. 重新加载systemd配置：
-   ```bash
-   sudo systemctl daemon-reload
-   ```
+### 2. 集成测试
 
-7. 启用服务开机自启：
-   ```bash
-   sudo systemctl enable dir-monitor-go
-   ```
+集成测试应测试组件之间的交互。
 
-8. 启动服务：
-   ```bash
-   sudo systemctl start dir-monitor-go
-   ```
+### 3. 运行测试
 
-### Docker部署
+```bash
+# 运行所有测试
+go test ./...
 
-1. 构建Docker镜像：
-   ```bash
-   docker build -t dir-monitor-go .
-   ```
+# 运行特定包的测试
+go test ./internal/config
 
-2. 运行Docker容器：
-   ```bash
-   docker run -d \
-     --name dir-monitor-go \
-     -v /path/to/configs:/opt/dir-monitor-go/configs \
-     -v /path/to/monitor:/path/to/monitor \
-     -v /path/to/logs:/opt/dir-monitor-go/logs \
-     dir-monitor-go
-   ```
+# 运行测试并生成覆盖率报告
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
 
-3. 查看容器日志：
-   ```bash
-   docker logs -f dir-monitor-go
-   ```
+### 4. 基准测试
 
-### Kubernetes部署
+```go
+func BenchmarkMonitorStart(b *testing.B) {
+    cfg := &config.Config{
+        Monitors: []config.Monitor{
+            {
+                Directory: "/tmp",
+                Command:   "echo test",
+            },
+        },
+    }
+    log := logger.NewLogger(logger.Config{Level: "info"})
+    monitor := monitor.NewMonitor(cfg, log)
 
-1. 创建ConfigMap：
-   ```yaml
-   apiVersion: v1
-   kind: ConfigMap
-   metadata:
-     name: dir-monitor-go-config
-   data:
-     config.json: |
-       {
-         "version": "3.2.1",
-         "metadata": {
-           "name": "K8s部署配置",
-           "description": "Kubernetes环境下的目录监控配置"
-         },
-         "monitors": [
-           {
-             "id": "k8s_monitor",
-             "name": "K8s文件监控器",
-             "directory": "/data/input",
-             "command": "/scripts/process-file.sh",
-             "file_patterns": ["*.txt", "*.csv"],
-             "timeout": 300,
-             "debounce_seconds": 15,
-             "enabled": true
-           }
-         ],
-         "settings": {
-           "log_level": "info",
-           "log_file": "/data/logs/app.log",
-           "max_concurrent_operations": 5
-         }
-       }
-   ```
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        monitor.Start()
+        monitor.Stop()
+    }
+}
+```
 
-2. 创建Deployment：
-   ```yaml
-   apiVersion: apps/v1
-   kind: Deployment
-   metadata:
-     name: dir-monitor-go
-   spec:
-     replicas: 1
-     selector:
-       matchLabels:
-         app: dir-monitor-go
-     template:
-       metadata:
-         labels:
-           app: dir-monitor-go
-       spec:
-         containers:
-         - name: dir-monitor-go
-           image: dir-monitor-go:latest
-           volumeMounts:
-           - name: config-volume
-             mountPath: /opt/dir-monitor-go/configs
-           - name: data-volume
-             mountPath: /data
-         volumes:
-         - name: config-volume
-           configMap:
-             name: dir-monitor-go-config
-         - name: data-volume
-           persistentVolumeClaim:
-             claimName: dir-monitor-data-pvc
-   ```
+## 构建与发布
 
-3. 部署到Kubernetes集群：
-   ```bash
-   kubectl apply -f configmap.yaml
-   kubectl apply -f deployment.yaml
-   ```
+### 1. 本地构建
 
-## 故障排除
+```bash
+# 使用Makefile
+make build
 
-### 编译问题
+# 手动构建
+go build -o dir-monitor-go ./cmd/dir-monitor-go
+```
 
-1. 确保Go版本符合要求（1.25+）
-2. 运行`go mod tidy`更新依赖
-3. 检查是否有语法错误
+### 2. 交叉编译
 
-### 运行时问题
+```bash
+# Linux AMD64
+GOOS=linux GOARCH=amd64 go build -o dir-monitor-go-linux-amd64 ./cmd/dir-monitor-go
 
-1. 检查配置文件格式和路径
-2. 确认监控目录权限
-3. 查看日志文件获取详细错误信息
+# Windows AMD64
+GOOS=windows GOARCH=amd64 go build -o dir-monitor-go-windows-amd64.exe ./cmd/dir-monitor-go
 
-### 性能问题
+# macOS AMD64
+GOOS=darwin GOARCH=amd64 go build -o dir-monitor-go-darwin-amd64 ./cmd/dir-monitor-go
+```
 
-1. 检查是否监控了过多文件
-2. 调整并发操作数设置
-3. 增加防抖时间避免频繁触发
+### 3. 构建标签
+
+使用构建标签控制不同平台的代码：
+
+```go
+// +build linux
+
+package monitor
+
+import "syscall"
+
+func getInode(path string) (uint64, error) {
+    var stat syscall.Stat_t
+    err := syscall.Stat(path, &stat)
+    if err != nil {
+        return 0, err
+    }
+    return stat.Ino, nil
+}
+```
+
+### 4. 发布流程
+
+1. 更新版本号
+2. 更新CHANGELOG.md
+3. 创建Git标签
+4. 构建多平台二进制文件
+5. 创建GitHub Release
 
 ## 贡献指南
 
-我们欢迎社区贡献！在提交贡献之前，请确保：
+### 1. 报告问题
 
-1. Fork项目并创建功能分支
-2. 遵循项目编码规范
-3. 添加相应的测试用例
+- 使用GitHub Issues
+- 提供详细的问题描述
+- 包含复现步骤
+- 附上相关日志和配置
+
+### 2. 提交代码
+
+1. Fork项目
+2. 创建功能分支
+3. 编写代码和测试
 4. 确保所有测试通过
-5. 提交清晰的commit信息
-6. 创建Pull Request并详细描述变更内容
+5. 提交Pull Request
 
-## 许可证
+### 3. 代码审查
 
-本项目采用MIT许可证，详情请参见[LICENSE](../LICENSE)文件。
+- 所有代码必须经过审查
+- 确保代码符合项目规范
+- 检查测试覆盖率
+- 验证功能正确性
+
+### 4. 文档更新
+
+- 更新相关文档
+- 添加新功能的示例
+- 更新CHANGELOG.md
+
+## 性能优化
+
+### 1. 监控性能
+
+使用内置性能监控功能：
+
+```go
+// 在配置中启用性能监控
+"performance_monitoring": {
+    "enabled": true,
+    "report_interval": "1m"
+}
+```
+
+### 2. 优化建议
+
+- 使用缓冲通道减少锁竞争
+- 合理设置并发操作数
+- 使用文件稳定性检查避免频繁触发
+- 优化文件模式匹配算法
+
+### 3. 内存管理
+
+- 及时释放不再使用的资源
+- 避免内存泄漏
+- 使用对象池减少GC压力
+
+## 故障排除
+
+### 1. 常见问题
+
+- **文件监控不工作**: 检查目录权限和文件系统类型
+- **高CPU使用**: 检查监控目录大小和文件变化频率
+- **内存泄漏**: 使用pprof工具分析内存使用
+
+### 2. 调试工具
+
+- 使用delve进行调试
+- 使用pprof进行性能分析
+- 启用详细日志记录
+
+```bash
+# 启用调试模式
+./dir-monitor-go -l debug
+
+# 使用pprof
+go tool pprof http://localhost:6060/debug/pprof/profile
+```
+
+---
+
+如有更多问题，请查看[用户指南](USER_GUIDE.md)或提交[Issue](https://github.com/zxxman/dir-monitor-go/issues)。

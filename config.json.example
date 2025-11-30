@@ -1,46 +1,94 @@
 {
   "version": "3.2.1",
+  "metadata": {
+    "created": "2025-10-16",
+    "description": "Dir-Monitor-Go configuration example",
+    "author": "Dir-Monitor-Go Team"
+  },
+  "log_file": "/var/log/dir-monitor-go/app.log",
+  "log_level": "info",
   "monitors": [
     {
-      "id": "monitor1",
-      "name": "日志文件监控",
-      "directory": "/var/log",
-      "command": "echo '处理文件: ${FILE_PATH}'",
-      "file_patterns": ["*.log", "*.txt"],
-      "timeout": 60,
-      "debounce_seconds": 5,
-      "enabled": true
+      "id": "web-assets-watch",
+      "name": "Web Assets Monitor",
+      "description": "Monitor web assets directory for changes and rebuild frontend",
+      "directory": "/var/www/assets",
+      "command": "cd /var/www && npm run build",
+      "file_patterns": [
+        "*.js",
+        "*.css",
+        "*.scss",
+        "*.html"
+      ],
+      "timeout": 30,
+      "enabled": true,
+      "debounce_seconds": 2,
+      "schedule": ""
     },
     {
-      "id": "monitor2", 
-      "name": "上传文件处理",
-      "directory": "/uploads",
-      "command": "python /scripts/process_file.py '${FILE_PATH}'",
-      "file_patterns": ["*.csv", "*.xlsx"],
-      "timeout": 300,
-      "schedule": "* 9-18 * * 1-5",
+      "id": "config-reload",
+      "name": "Configuration Monitor",
+      "description": "Monitor configuration files and reload services",
+      "directory": "/etc/myapp",
+      "command": "systemctl reload myapp",
+      "file_patterns": [
+        "*.conf",
+        "*.yaml",
+        "*.yml",
+        "*.json"
+      ],
+      "timeout": 10,
+      "enabled": true,
+      "debounce_seconds": 5,
+      "schedule": ""
+    },
+    {
+      "id": "log-rotation",
+      "name": "Log Rotation Monitor",
+      "description": "Monitor log directory and trigger rotation when needed",
+      "directory": "/var/log/myapp",
+      "command": "/usr/local/sbin/rotate-logs.sh",
+      "file_patterns": [
+        "*.log"
+      ],
+      "timeout": 60,
+      "enabled": true,
       "debounce_seconds": 10,
-      "enabled": true
+      "schedule": "0 2 * * *"
+    },
+    {
+      "id": "backup-trigger",
+      "name": "Backup Trigger",
+      "description": "Monitor data directory and trigger backup on changes",
+      "directory": "/data/myapp",
+      "command": "/usr/local/bin/backup-data.sh",
+      "file_patterns": [
+        "*.db",
+        "*.sqlite",
+        "*.data"
+      ],
+      "timeout": 300,
+      "enabled": true,
+      "debounce_seconds": 30,
+      "schedule": "0 3 * * 0"
     }
   ],
   "settings": {
-    "log_file": "logs/dir-monitor-go.log",
     "log_level": "info",
-    "log_show_caller": false,
+    "log_file": "/var/log/dir-monitor-go/app.log",
     "log_max_size": 10485760,
-    "log_compress": true,
+    "log_max_backups": 5,
+    "log_show_caller": false,
     "max_concurrent_operations": 5,
     "operation_timeout_seconds": 300,
-    "file_stability_check_interval_ms": 1000,
-    "file_stability_timeout_seconds": 60,
-    "min_stability_time_ms": 5000,
-    "default_debounce_seconds": 1,
+    "file_watcher_buffer_size": 1000,
+    "event_channel_buffer_size": 100,
+    "min_stability_time_ms": 500,
+    "execution_dedup_interval_seconds": 5,
     "directory_stability_quiet_ms": 2000,
-    "directory_stability_timeout_seconds": 60,
-    "small_file_threshold": 1048576,
-    "medium_file_threshold": 10485760,
-    "large_file_threshold": 104857600,
-    "default_rule_debounce_seconds": 30,
-    "performance_monitoring": false
+    "directory_stability_timeout_seconds": 30,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5,
+    "health_check_interval_seconds": 60
   }
 }

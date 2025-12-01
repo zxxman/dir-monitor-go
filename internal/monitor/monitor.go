@@ -299,8 +299,45 @@ func (m *Monitor) processDirectoryEvents(dir string) {
 	delete(m.dirBuffers, dir)
 	delete(m.dirTimers, dir)
 
+	// 收集匹配的监控项，同一监控项只执行一次
+	matchedMonitors := make(map[string]config.Monitor)
+	var firstMatchingEvent model.FileEvent
+	firstEventSet := false
+
+	// 遍历所有事件，收集匹配的监控项
 	for _, event := range events {
-		m.processFileEventInStableDir(event)
+		for _, monitor := range m.config.Monitors {
+			if !monitor.Enabled {
+				continue
+			}
+
+			if event.Directory != monitor.Directory {
+				continue
+			}
+
+			if !m.matchesFilePattern(event.Path, monitor.FilePatterns) {
+				continue
+			}
+
+			if monitor.Schedule != "" && !m.isScheduleActive(monitor.Schedule) {
+				continue
+			}
+
+			// 记录第一个匹配的事件，用于执行命令
+			if !firstEventSet {
+				firstMatchingEvent = event
+				firstEventSet = true
+			}
+
+			// 记录匹配的监控项，使用命令作为唯一标识
+			matchedMonitors[monitor.Command] = monitor
+		}
+	}
+
+	// 对每个匹配的监控项执行一次命令
+	for _, monitor := range matchedMonitors {
+		m.logger.Info("[Monitor] 批量处理目录事件，执行命令: %s, 目录: %s, 文件数量: %d", monitor.Command, dir, len(events))
+		m.executeCommand(monitor, firstMatchingEvent)
 	}
 }
 
